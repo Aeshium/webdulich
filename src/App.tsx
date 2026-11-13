@@ -15,7 +15,8 @@ import {
   Sparkles as SparklesIcon,
   X,
 } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { type Location as RouterLocation, useLocation, useNavigate } from 'react-router-dom'
 import { A11y, Autoplay } from 'swiper/modules'
 import { Swiper, SwiperSlide } from 'swiper/react'
 import type { Swiper as SwiperInstance } from 'swiper'
@@ -26,90 +27,144 @@ import 'swiper/css'
 
 gsap.registerPlugin(ScrollTrigger)
 
-type RouteScramble = {
-  progress: { value: number }
-  render: () => void
-  cleanup: () => void
-}
-
-type RouteMask = {
-  host: HTMLElement
-  mask: HTMLSpanElement
-  images: HTMLImageElement[]
-  imageOpacities: string[]
-}
-
 const scrambleCharacters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789@#$%&!?+*/'
 
-function createRouteScramble(target: HTMLElement): RouteScramble | null {
-  const bounds = target.getBoundingClientRect()
-  const walker = document.createTreeWalker(target, NodeFilter.SHOW_TEXT)
-  const textNodes: Text[] = []
-  while (walker.nextNode()) {
-    const node = walker.currentNode as Text
-    if (!node.parentElement?.closest('.route-mask')) textNodes.push(node)
+function isInView(element: Element) {
+  const bounds = element.getBoundingClientRect()
+  return (
+    bounds.width > 0 &&
+    bounds.height > 0 &&
+    bounds.top < window.innerHeight * 0.98 &&
+    bounds.bottom > 0 &&
+    bounds.left < window.innerWidth &&
+    bounds.right > 0
+  )
+}
+
+function pageColor() {
+  const shell = document.querySelector('.app-shell')
+  return shell ? getComputedStyle(shell).backgroundColor : '#f4f1e9'
+}
+
+function createVeil(host: HTMLElement, color: string) {
+  host.classList.add('route-mask-host')
+  if (getComputedStyle(host).position === 'static') {
+    host.classList.add('route-mask-host-positioned')
   }
+  const veil = document.createElement('span')
+  veil.className = 'route-veil'
+  veil.setAttribute('aria-hidden', 'true')
+  veil.style.background = color
+  host.append(veil)
+  return veil
+}
 
-  const glyphs: { element: HTMLSpanElement; value: string }[] = []
-  textNodes.forEach((node) => {
-    const text = node.textContent ?? ''
-    let offset = 0
-    Array.from(text).forEach((character) => {
-      const start = offset
-      offset += character.length
-      if (/\s/.test(character)) return
+function clearVeils(hosts: HTMLElement[]) {
+  hosts.forEach((host) => {
+    host.querySelectorAll('.route-veil').forEach((veil) => veil.remove())
+    host.classList.remove('route-mask-host', 'route-mask-host-positioned', 'is-route-hidden')
+    host.style.backgroundColor = ''
+  })
+}
 
-      const range = document.createRange()
-      range.setStart(node, start)
-      range.setEnd(node, offset)
-      const rect = range.getBoundingClientRect()
-      if (!rect.width || !rect.height) return
+function splitIntoLines(element: HTMLElement) {
+  if (element.dataset.routeOriginal != null) {
+    return gsap.utils.toArray<HTMLElement>('.route-line-inner', element)
+  }
+  const original = element.textContent ?? ''
+  const words = original.trim().split(/\s+/).filter(Boolean)
+  if (!words.length) return []
 
-      const glyph = document.createElement('span')
-      glyph.className = 'route-scramble-glyph'
-      glyph.textContent = character
-      glyph.style.left = `${rect.left - bounds.left}px`
-      glyph.style.top = `${rect.top - bounds.top}px`
-      glyph.style.width = `${rect.width}px`
-      glyph.style.height = `${rect.height}px`
-      glyphs.push({ element: glyph, value: character })
-    })
+  element.dataset.routeOriginal = original
+  const probes: HTMLSpanElement[] = []
+  element.replaceChildren()
+  words.forEach((word, index) => {
+    const probe = document.createElement('span')
+    probe.textContent = word
+    element.append(probe)
+    probes.push(probe)
+    if (index < words.length - 1) element.append(document.createTextNode(' '))
   })
 
-  if (!glyphs.length) return null
+  const groups: string[][] = []
+  let currentTop = probes[0]?.offsetTop ?? 0
+  let bucket: string[] = []
+  probes.forEach((probe) => {
+    if (bucket.length && Math.abs(probe.offsetTop - currentTop) > 3) {
+      groups.push(bucket)
+      bucket = []
+      currentTop = probe.offsetTop
+    }
+    bucket.push(probe.textContent ?? '')
+  })
+  if (bucket.length) groups.push(bucket)
 
-  const originalColor = target.style.color
-  const overlay = document.createElement('span')
-  overlay.className = 'route-scramble'
-  overlay.setAttribute('aria-hidden', 'true')
-  overlay.style.color = getComputedStyle(target).color
-  glyphs.forEach(({ element }) => overlay.append(element))
+  element.replaceChildren()
+  return groups.map((group) => {
+    const line = document.createElement('span')
+    line.className = 'route-line'
+    const inner = document.createElement('span')
+    inner.className = 'route-line-inner'
+    inner.textContent = group.join(' ')
+    line.append(inner)
+    element.append(line)
+    inner.style.width = `${inner.offsetWidth}px`
+    return inner
+  })
+}
 
-  const positionedByScramble = getComputedStyle(target).position === 'static'
-  if (positionedByScramble) target.classList.add('route-scramble-host-positioned')
-  target.style.color = 'transparent'
-  target.append(overlay)
+function restoreLines(element: HTMLElement) {
+  if (element.dataset.routeOriginal == null) return
+  element.textContent = element.dataset.routeOriginal
+  delete element.dataset.routeOriginal
+}
 
+function scrambleLine(line: HTMLElement) {
+  const original = Array.from(line.textContent ?? '')
   const progress = { value: 0 }
-  const render = () => {
-    const settledCount = Math.floor(progress.value * glyphs.length)
-    glyphs.forEach(({ element }, index) => {
-      if (index < settledCount) return
-      element.textContent =
-        scrambleCharacters[Math.floor(Math.random() * scrambleCharacters.length)]
-    })
-  }
-  render()
-
   return {
     progress,
-    render,
-    cleanup: () => {
-      overlay.remove()
-      target.style.color = originalColor
-      if (positionedByScramble) target.classList.remove('route-scramble-host-positioned')
+    render: () => {
+      const settled = Math.floor(progress.value * original.length)
+      line.textContent = original
+        .map((character, index) => {
+          if (index < settled || /\s/.test(character)) return character
+          return scrambleCharacters[Math.floor(Math.random() * scrambleCharacters.length)]
+        })
+        .join('')
     },
   }
+}
+
+function getVisibleImageHosts() {
+  return gsap.utils.toArray<HTMLElement>('main .image-motion').filter(isInView)
+}
+
+async function waitForRouteImages(hosts: HTMLElement[]) {
+  await Promise.all(
+    hosts.flatMap((host) =>
+      gsap.utils.toArray<HTMLImageElement>('img', host).map(async (image) => {
+        image.loading = 'eager'
+        if (!image.complete) {
+          await new Promise<void>((resolve) => {
+            const finish = () => resolve()
+            image.addEventListener('load', finish, { once: true })
+            image.addEventListener('error', finish, { once: true })
+            if (image.complete) finish()
+          })
+        }
+        if (!image.naturalWidth) {
+          console.error(`Route transition image failed to load: ${image.currentSrc}`)
+          return
+        }
+        try {
+          await image.decode()
+        } catch (error) {
+          console.error(`Route transition image failed to decode: ${image.currentSrc}`, error)
+        }
+      }),
+    ),
+  )
 }
 
 const destinations = [
@@ -226,267 +281,23 @@ function ExperienceModal({
 }
 
 function App() {
+  const location = useLocation()
+  const navigate = useNavigate()
   const [activeQuestion, setActiveQuestion] = useState<number | null>(0)
   const [experienceOpen, setExperienceOpen] = useState(false)
-  const [page, setPage] = useState<SitePage>(() => getCurrentPage())
+  const [displayLocation, setDisplayLocation] = useState<RouterLocation>(location)
+  const page = getCurrentPage(displayLocation.pathname)
   const [theme, setTheme] = useState<'light' | 'dark'>(() =>
     window.localStorage.getItem('lumi-theme') === 'dark' ? 'dark' : 'light',
   )
   const swiperRef = useRef<SwiperInstance | null>(null)
   const routeTransitioning = useRef(false)
+  const navigationPending = useRef(false)
+  const locationRef = useRef(location)
+  locationRef.current = location
   const experienceClose = () => setExperienceOpen(false)
 
   useEffect(() => {
-    let navigating = false
-    const applyRoute = (url: URL, historyMode: 'push' | 'replace' | 'none') => {
-      if (historyMode === 'replace') history.replaceState(null, '', url)
-      if (historyMode === 'push') history.pushState(null, '', url)
-      window.scrollTo({ top: 0, left: 0, behavior: 'instant' })
-      setPage(getCurrentPage())
-      const menuToggle = document.querySelector<HTMLInputElement>('#nav-toggle')
-      if (menuToggle) menuToggle.checked = false
-      requestAnimationFrame(() => {
-        if (url.hash) {
-          document.getElementById(decodeURIComponent(url.hash.slice(1)))?.scrollIntoView()
-        }
-        ScrollTrigger.refresh()
-      })
-    }
-    const waitForTimeline = (timeline: gsap.core.Timeline) =>
-      new Promise<void>((resolve) => timeline.eventCallback('onComplete', resolve))
-    const waitForFrame = () =>
-      new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()))
-    const waitForPaint = async () => {
-      await waitForFrame()
-      await waitForFrame()
-    }
-    const clearMasks = (entries: RouteMask[]) =>
-      entries.forEach(({ host, mask, images, imageOpacities }) => {
-        mask.remove()
-        host.classList.remove('route-mask-host', 'route-mask-host-positioned')
-        images.forEach((image, index) => {
-          image.style.opacity = imageOpacities[index] ?? ''
-        })
-      })
-    const transitionRoute = async (
-      url: URL,
-      historyMode: 'push' | 'replace' | 'none' = 'push',
-    ) => {
-      if (navigating) return
-      navigating = true
-      routeTransitioning.current = true
-      const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-
-      if (reducedMotion) {
-        applyRoute(url, historyMode)
-        routeTransitioning.current = false
-        navigating = false
-        return
-      }
-
-      let outgoingMasks: RouteMask[] = []
-      let incomingMasks: RouteMask[] = []
-      let incomingScrambles: RouteScramble[] = []
-      try {
-      const outgoingHeadings = gsap.utils.toArray<HTMLElement>(
-        'main .hero h1, main .subpage-copy h1',
-      )
-      const outgoingHeadingLines = outgoingHeadings.flatMap((heading) =>
-        gsap.utils.toArray<HTMLElement>('.headline-line-inner', heading),
-      )
-      const outgoingCopy = gsap.utils.toArray<HTMLElement>(
-        'main .hero-copy > .eyebrow, main .hero-description, main .topline-note, main .subpage-copy > .eyebrow, main .subpage-copy > p',
-      )
-      const getMaskTargets = () => {
-        const inViewport = (element: HTMLElement) => {
-          const bounds = element.getBoundingClientRect()
-          return (
-            bounds.width > 0 &&
-            bounds.height > 0 &&
-            bounds.top < window.innerHeight &&
-            bounds.bottom > 0 &&
-            bounds.left < window.innerWidth &&
-            bounds.right > 0
-          )
-        }
-        return gsap.utils
-          .toArray<HTMLElement>('main .image-motion')
-          .filter(inViewport)
-      }
-      const prepareMasks = (targets: HTMLElement[]) =>
-        targets.map((host) => {
-          host.classList.add('route-mask-host')
-          if (getComputedStyle(host).position === 'static') {
-            host.classList.add('route-mask-host-positioned')
-          }
-          const mask = document.createElement('span')
-          mask.className = 'route-mask'
-          mask.setAttribute('aria-hidden', 'true')
-          host.append(mask)
-          const images = gsap.utils.toArray<HTMLImageElement>('img', host)
-          return {
-            host,
-            mask,
-            images,
-            imageOpacities: images.map((image) => image.style.opacity),
-          }
-        })
-      const waitForMaskImages = (entries: RouteMask[]) =>
-        Promise.all(
-          entries.flatMap(({ images }) =>
-            images.map(async (image) => {
-              image.loading = 'eager'
-              if (!image.complete) {
-                await new Promise<void>((resolve) => {
-                  const finish = () => resolve()
-                  image.addEventListener('load', finish, { once: true })
-                  image.addEventListener('error', finish, { once: true })
-                  if (image.complete) finish()
-                })
-              }
-              if (!image.naturalWidth) {
-                console.error(`Route transition image failed to load: ${image.currentSrc}`)
-                return
-              }
-              try {
-                await image.decode()
-              } catch (error) {
-                console.error(`Route transition image failed to decode: ${image.currentSrc}`, error)
-              }
-            }),
-          ),
-        )
-      const outgoingIntroElements = gsap.utils.toArray<HTMLElement>(
-        'main .hero-copy > :not(h1), main .subpage-copy > :not(h1)',
-      )
-      gsap.killTweensOf([...outgoingHeadingLines, ...outgoingCopy, ...outgoingIntroElements])
-      const outgoingHeroPhoto = document.querySelector<HTMLElement>('.hero-photo')
-      if (outgoingHeroPhoto) {
-        gsap.killTweensOf(outgoingHeroPhoto)
-        gsap.set(outgoingHeroPhoto, { clipPath: 'inset(0 0 0 0)' })
-      }
-      outgoingMasks = prepareMasks(getMaskTargets())
-      gsap.set(
-        outgoingMasks.map(({ mask }) => mask),
-        { scaleX: 0, transformOrigin: 'right center' },
-      )
-      const leaveTimeline = gsap.timeline()
-      leaveTimeline
-        .to(outgoingMasks.map(({ mask }) => mask), {
-          scaleX: 1,
-          duration: 0.68,
-          stagger: 0.025,
-          ease: 'power3.inOut',
-        })
-        .to(
-          outgoingHeadingLines,
-          {
-            yPercent: -110,
-            duration: 0.58,
-            stagger: 0.06,
-            ease: 'power3.in',
-          },
-          0.08,
-        )
-        .to(
-          outgoingCopy,
-          {
-            x: -42,
-            opacity: 0,
-            duration: 0.42,
-            stagger: 0.025,
-            ease: 'power2.in',
-          },
-          0.04,
-        )
-      await waitForTimeline(leaveTimeline)
-
-      document.querySelector('.app-shell')?.classList.add('route-arrival')
-      outgoingMasks.forEach(({ images }) => gsap.set(images, { opacity: 0 }))
-      await waitForPaint()
-      clearMasks(outgoingMasks)
-      outgoingMasks = []
-      applyRoute(url, historyMode)
-      await new Promise<void>((resolve) => window.setTimeout(resolve, 180))
-
-      const incomingHeadings = gsap.utils.toArray<HTMLElement>(
-        'main .hero h1, main .subpage-copy h1',
-      )
-      const incomingHeadingLines = incomingHeadings.flatMap((heading) =>
-        gsap.utils.toArray<HTMLElement>('.headline-line-inner', heading),
-      )
-      const incomingCopy = gsap.utils.toArray<HTMLElement>(
-        'main .hero-copy > .eyebrow, main .hero-description, main .topline-note, main .subpage-copy > .eyebrow, main .subpage-copy > p',
-      )
-      incomingScrambles = gsap.utils
-        .toArray<HTMLElement>('main .hero-description, main .subpage-copy > p')
-        .map(createRouteScramble)
-        .filter((scramble): scramble is RouteScramble => scramble !== null)
-      incomingMasks = prepareMasks(getMaskTargets())
-      await waitForMaskImages(incomingMasks)
-      gsap.set(incomingHeadingLines, { yPercent: 110 })
-      gsap.set(incomingCopy, { x: -16, opacity: 0 })
-      gsap.set(
-        incomingMasks.map(({ mask }) => mask),
-        { scaleX: 1, transformOrigin: 'left center' },
-      )
-      document.querySelector('.app-shell')?.classList.remove('route-arrival')
-      const enterTimeline = gsap.timeline({ paused: true })
-      enterTimeline
-        .to(incomingMasks.map(({ mask }) => mask), {
-          scaleX: 0,
-          duration: 0.68,
-          stagger: 0.025,
-          ease: 'power3.inOut',
-        })
-        .to(
-          incomingHeadingLines,
-          {
-            yPercent: 0,
-            duration: 0.82,
-            stagger: 0.075,
-            ease: 'power3.out',
-          },
-          0,
-        )
-        .to(
-          incomingCopy,
-          {
-            x: 0,
-            opacity: 1,
-            duration: 0.6,
-            stagger: 0.045,
-            ease: 'power2.out',
-          },
-          0.12,
-        )
-        .to(
-          incomingScrambles.map((scramble) => scramble.progress),
-          {
-            value: 1,
-            duration: 0.76,
-            stagger: 0.08,
-            ease: 'none',
-            onUpdate: () => incomingScrambles.forEach((scramble) => scramble.render()),
-          },
-          0.12,
-        )
-      enterTimeline.play(0)
-      document.querySelector('.app-shell')?.classList.remove('route-arrival')
-      await waitForTimeline(enterTimeline)
-      incomingScrambles.forEach((scramble) => scramble.cleanup())
-      incomingScrambles = []
-      clearMasks(incomingMasks)
-      incomingMasks = []
-      } finally {
-        incomingScrambles.forEach((scramble) => scramble.cleanup())
-        clearMasks(outgoingMasks)
-        clearMasks(incomingMasks)
-        document.querySelector('.app-shell')?.classList.remove('route-arrival')
-        routeTransitioning.current = false
-        navigating = false
-      }
-    }
     const handleClick = (event: MouseEvent) => {
       if (
         event.defaultPrevented ||
@@ -502,28 +313,289 @@ function App() {
       if (url.origin !== window.location.origin) return
       if (
         url.pathname === window.location.pathname &&
-        url.search === window.location.search &&
-        url.hash
+        url.search === window.location.search
       ) return
-      if (
-        url.pathname === window.location.pathname &&
-        url.search === window.location.search &&
-        !url.hash
-      ) return
+      if (routeTransitioning.current || navigationPending.current) {
+        event.preventDefault()
+        return
+      }
       event.preventDefault()
-      void transitionRoute(url)
-    }
-    const handlePopState = () => {
-      void transitionRoute(new URL(window.location.href), 'none')
+      navigationPending.current = true
+      navigate(`${url.pathname}${url.search}${url.hash}`)
     }
     history.scrollRestoration = 'manual'
     document.addEventListener('click', handleClick)
-    window.addEventListener('popstate', handlePopState)
     return () => {
       document.removeEventListener('click', handleClick)
-      window.removeEventListener('popstate', handlePopState)
     }
-  }, [])
+  }, [navigate])
+
+  useEffect(() => {
+    if (
+      location.pathname === displayLocation.pathname &&
+      location.search === displayLocation.search
+    ) return
+    if (routeTransitioning.current) return
+
+    const destination = location
+    const closeMenu = () => {
+      const menuToggle = document.querySelector<HTMLInputElement>('#nav-toggle')
+      if (menuToggle) menuToggle.checked = false
+    }
+    const revealHash = () => {
+      if (!destination.hash) return
+      document.getElementById(decodeURIComponent(destination.hash.slice(1)))?.scrollIntoView()
+    }
+
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      setDisplayLocation(destination)
+      window.scrollTo({ top: 0, left: 0, behavior: 'instant' })
+      closeMenu()
+      navigationPending.current = false
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          ScrollTrigger.refresh()
+          revealHash()
+        })
+      })
+      return
+    }
+
+    routeTransitioning.current = true
+    navigationPending.current = false
+    document.documentElement.classList.add('is-navigating')
+
+    const hosts = getVisibleImageHosts()
+    const heroPhoto = document.querySelector<HTMLElement>('.hero-photo')
+    if (heroPhoto) {
+      gsap.killTweensOf(heroPhoto)
+      gsap.set(heroPhoto, { clearProps: 'clipPath' })
+    }
+
+    const darkVeils = hosts.map((host) => {
+      const veil = createVeil(host, '#1a1a1a')
+      gsap.set(veil, { scaleX: 0, transformOrigin: 'right center', visibility: 'visible' })
+      return veil
+    })
+    const paperVeils = hosts.map((host) => {
+      const veil = createVeil(host, pageColor())
+      gsap.set(veil, { scaleX: 0, transformOrigin: 'right center', visibility: 'visible' })
+      return veil
+    })
+    const headings = gsap.utils.toArray<HTMLElement>('main .headline-line-inner').filter((line) => isInView(line))
+    const descriptions = gsap.utils
+      .toArray<HTMLElement>('main .hero-description, main .subpage-copy > p')
+      .filter(isInView)
+    gsap.killTweensOf(descriptions)
+    gsap.set(descriptions, { clearProps: 'opacity,transform,clipPath' })
+    const descriptionLines = descriptions.flatMap(splitIntoLines)
+    const blocks = gsap.utils
+      .toArray<HTMLElement>('main .eyebrow, main .topline-note, main .topline-pill, main .hero-index, main .subpage-index, main h3, main .round-link, main p')
+      .filter((element) => isInView(element) && !descriptions.includes(element) && !element.closest('.image-motion, .route-line'))
+    const aside = gsap.utils.toArray<HTMLElement>('main .hero-aside').filter(isInView)
+    const footer = document.querySelector<HTMLElement>('.site-footer')
+    const footerVisible = Boolean(footer && isInView(footer))
+    gsap.killTweensOf([...headings, ...descriptionLines, ...blocks, ...aside, ...darkVeils, ...paperVeils])
+
+    let completed = false
+    const commit = () => {
+      if (completed) return
+      completed = true
+      window.scrollTo({ top: 0, left: 0, behavior: 'instant' })
+      closeMenu()
+      setDisplayLocation(destination)
+    }
+    const timeline = gsap.timeline({ onComplete: commit })
+    if (darkVeils.length) {
+      timeline.to(darkVeils, { scaleX: 1, duration: 0.45, ease: 'power3.inOut' }, 0)
+      timeline.to(paperVeils, { scaleX: 1, duration: 0.4, ease: 'power3.inOut' }, 0.42)
+    }
+    if (headings.length) {
+      timeline.to(headings, { yPercent: -100, duration: 0.6, stagger: 0.06, ease: 'power3.in' }, 0)
+    }
+    if (descriptionLines.length) {
+      timeline.fromTo(
+        descriptionLines,
+        { clipPath: 'inset(0 0% 0 0)' },
+        { clipPath: 'inset(0 100% 0 0)', duration: 0.5, stagger: 0.04, ease: 'power2.in' },
+        0,
+      )
+    }
+    if (blocks.length) {
+      timeline.fromTo(
+        blocks,
+        { clipPath: 'inset(0 0% 0 0)' },
+        { clipPath: 'inset(0 100% 0 0)', duration: 0.45, stagger: 0.03, ease: 'power2.in' },
+        0,
+      )
+    }
+    if (aside.length) {
+      timeline.to(aside, { opacity: 0, y: -16, duration: 0.45, ease: 'power2.in' }, 0)
+    }
+    if (footer && footerVisible) {
+      timeline.fromTo(
+        footer,
+        { clipPath: 'inset(0% 0 0 0)' },
+        { clipPath: 'inset(100% 0 0 0)', duration: 0.7, ease: 'expo.inOut' },
+        Math.max(0, timeline.duration() - 0.3),
+      )
+    }
+    if (!timeline.duration()) commit()
+
+    return () => {
+      timeline.kill()
+      if (!completed) {
+        routeTransitioning.current = false
+        navigationPending.current = false
+        document.documentElement.classList.remove('is-navigating')
+        clearVeils(hosts)
+        descriptions.forEach(restoreLines)
+        gsap.set([...headings, ...aside], { clearProps: 'transform,opacity' })
+        gsap.set(blocks, { clearProps: 'clipPath' })
+        if (footer) gsap.set(footer, { clearProps: 'clipPath' })
+      }
+    }
+  }, [location, displayLocation.pathname, displayLocation.search])
+
+  useLayoutEffect(() => {
+    if (!routeTransitioning.current) return
+
+    const footer = document.querySelector<HTMLElement>('.site-footer')
+    if (footer) gsap.set(footer, { clearProps: 'clipPath' })
+
+    const hosts = getVisibleImageHosts()
+    const color = pageColor()
+    hosts.forEach((host) => {
+      host.classList.add('is-route-hidden')
+      host.style.backgroundColor = color
+    })
+    const veils = hosts.map((host) => {
+      const veil = createVeil(host, '#1a1a1a')
+      gsap.set(veil, { scaleX: 0, transformOrigin: 'left center', visibility: 'visible' })
+      return veil
+    })
+    const headings = gsap.utils.toArray<HTMLElement>(
+      'main .hero h1 .headline-line-inner, main .subpage-copy h1 .headline-line-inner',
+    )
+    const descriptions = gsap.utils.toArray<HTMLElement>('main .hero-description, main .subpage-copy > p')
+    const descriptionLines = descriptions.flatMap(splitIntoLines)
+    const scrambles = descriptionLines.map(scrambleLine)
+    const blocks = gsap.utils.toArray<HTMLElement>(
+      'main .hero-topline > *, main .hero-copy > .eyebrow, main .hero-index, main .hero .round-link, main .subpage-copy > .eyebrow, main .subpage-index, main .subpage-copy .round-link',
+    )
+    const aside = gsap.utils.toArray<HTMLElement>('main .hero-aside')
+
+    const textTimeline = gsap.timeline()
+    if (headings.length) {
+      textTimeline.fromTo(
+        headings,
+        { yPercent: 100 },
+        { yPercent: 0, duration: 0.9, stagger: 0.08, ease: 'power3.out' },
+        0.05,
+      )
+    }
+    descriptionLines.forEach((line, index) => {
+      const scramble = scrambles[index]
+      const at = 0.12 + index * 0.1
+      textTimeline.fromTo(
+        line,
+        { clipPath: 'inset(0 100% 0 0)' },
+        { clipPath: 'inset(0 0% 0 0)', duration: 0.6, ease: 'power2.out' },
+        at,
+      )
+      textTimeline.to(
+        scramble.progress,
+        { value: 1, duration: 0.9, ease: 'none', onUpdate: scramble.render },
+        at,
+      )
+    })
+    if (blocks.length) {
+      textTimeline.fromTo(
+        blocks,
+        { clipPath: 'inset(0 100% 0 0)' },
+        { clipPath: 'inset(0 0% 0 0)', duration: 0.55, stagger: 0.05, ease: 'power2.out' },
+        0.08,
+      )
+    }
+    if (aside.length) {
+      textTimeline.fromTo(
+        aside,
+        { opacity: 0, y: 16 },
+        { opacity: 1, y: 0, duration: 0.6, ease: 'power3.out' },
+        0.2,
+      )
+    }
+
+    let cancelled = false
+    let revealTimeline: gsap.core.Timeline | null = null
+    let settled = false
+    const settle = () => {
+      if (settled) return
+      settled = true
+      descriptions.forEach(restoreLines)
+      clearVeils(hosts)
+      gsap.set(headings, { clearProps: 'transform' })
+      gsap.set(blocks, { clearProps: 'clipPath' })
+      gsap.set(aside, { clearProps: 'opacity,transform' })
+      routeTransitioning.current = false
+      navigationPending.current = false
+      document.documentElement.classList.remove('is-navigating')
+      const hash = locationRef.current.hash
+      requestAnimationFrame(() => {
+        ScrollTrigger.refresh()
+        if (hash) document.getElementById(decodeURIComponent(hash.slice(1)))?.scrollIntoView()
+      })
+    }
+
+    const coverTimeline = gsap.timeline()
+    veils.forEach((veil, index) => {
+      coverTimeline.to(veil, { scaleX: 1, duration: 0.45, ease: 'power2.inOut' }, Math.min(index, 4) * 0.06)
+    })
+
+    let pending = 2
+    const done = () => {
+      pending -= 1
+      if (pending <= 0) settle()
+    }
+    if (textTimeline.duration()) textTimeline.eventCallback('onComplete', done)
+    else done()
+
+    void (async () => {
+      await Promise.all([
+        waitForRouteImages(hosts),
+        coverTimeline.duration() ? coverTimeline.then() : Promise.resolve(),
+      ])
+      if (cancelled) return
+      hosts.forEach((host) => host.classList.remove('is-route-hidden'))
+      veils.forEach((veil) => gsap.set(veil, { transformOrigin: 'right center' }))
+      revealTimeline = gsap.timeline({ delay: 0.05, onComplete: done })
+      if (!veils.length) {
+        done()
+        return
+      }
+      veils.forEach((veil, index) => {
+        revealTimeline?.to(
+          veil,
+          { scaleX: 0, duration: 0.6, ease: 'power3.inOut' },
+          Math.min(index, 4) * 0.06,
+        )
+      })
+    })()
+
+    return () => {
+      cancelled = true
+      textTimeline.kill()
+      coverTimeline.kill()
+      revealTimeline?.kill()
+      if (!settled) {
+        descriptions.forEach(restoreLines)
+        clearVeils(hosts)
+        gsap.set(headings, { clearProps: 'transform' })
+        gsap.set(blocks, { clearProps: 'clipPath' })
+        gsap.set(aside, { clearProps: 'opacity,transform' })
+      }
+    }
+  }, [displayLocation.key])
 
   useEffect(() => {
     const pageTitle: Record<SitePage, string> = {
@@ -563,22 +635,20 @@ function App() {
   useEffect(() => {
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
     const context = gsap.context(() => {
-      if (!routeTransitioning.current) {
-        const introElements = document.querySelectorAll<HTMLElement>(
-          '.hero-copy > :not(h1), .subpage-copy > :not(h1)',
-        )
-        if (introElements.length) {
-          gsap.from(introElements, {
-            y: 34,
-            opacity: 0,
-            duration: 0.9,
-            stagger: 0.1,
-            ease: 'power3.out',
-            delay: 0.15,
-          })
-        }
+      const introElements = document.querySelectorAll<HTMLElement>(
+        '.hero-copy > :not(h1), .subpage-copy > :not(h1)',
+      )
+      if (!routeTransitioning.current && introElements.length) {
+        gsap.from(introElements, {
+          y: 34,
+          opacity: 0,
+          duration: 0.9,
+          stagger: 0.1,
+          ease: 'power3.out',
+          delay: 0.15,
+        })
       }
-      if (document.querySelector('.hero-photo') && !routeTransitioning.current) {
+      if (!routeTransitioning.current && document.querySelector('.hero-photo')) {
         gsap.from('.hero-photo', {
           clipPath: 'inset(0 0 100% 0)',
           duration: 1.2,
@@ -637,7 +707,7 @@ function App() {
         })
       })
       gsap.utils.toArray<HTMLElement>('[data-text-reveal]').forEach((element) => {
-        if (routeTransitioning.current && element.matches('.hero h1, .subpage-copy h1')) return
+        if (routeTransitioning.current && element.closest('.hero, .subpage-hero')) return
         const lines = gsap.utils.toArray<HTMLElement>('.headline-line-inner', element)
         if (lines.length) {
           gsap.fromTo(
@@ -998,8 +1068,8 @@ function App() {
   )
 }
 
-function getCurrentPage(): SitePage {
-  const path = window.location.pathname.replace(/\/+$/, '') || '/'
+function getCurrentPage(pathname: string): SitePage {
+  const path = pathname.replace(/\/+$/, '') || '/'
   if (path === '/solutions') return 'solutions'
   if (path === '/experiences') return 'experiences'
   if (path === '/features' || path === '/fonctionnalites') return 'features'

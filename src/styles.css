@@ -28,16 +28,13 @@ button { cursor: pointer; }
 img { display: block; max-width: 100%; }
 ::selection { color: var(--ink); background: #d7edb4; }
 .app-shell { min-height: 100vh; color: var(--ink); background: var(--paper); transition: color .35s, background-color .35s; }
-.app-shell.route-arrival main { visibility: hidden; }
-.app-shell.route-arrival > .site-footer { visibility: hidden; }
-.app-shell.route-arrival .scroll-progress { visibility: hidden; }
 .route-mask-host { overflow: hidden; isolation: isolate; }
 .route-mask-host-positioned { position: relative; }
-.route-mask { position: absolute; z-index: 20; inset: 0; display: block; pointer-events: none; border-radius: inherit; background: #171b18; transform: scaleX(0); transform-origin: right center; backface-visibility: hidden; will-change: transform; }
-.route-mask::after { content: ''; position: absolute; top: 0; right: 0; width: 7%; height: 100%; background: linear-gradient(90deg,transparent,rgba(215,237,180,.14)); }
-.route-scramble-host-positioned { position: relative; }
-.route-scramble { position: absolute; z-index: 1; inset: 0; display: block; overflow: hidden; pointer-events: none; }
-.route-scramble-glyph { position: absolute; display: block; overflow: hidden; font: inherit; line-height: inherit; letter-spacing: inherit; text-align: center; white-space: nowrap; }
+.route-veil { position: absolute; z-index: 6; inset: -1px; display: block; background: #1a1a1a; pointer-events: none; visibility: hidden; transform: scaleX(0); transform-origin: left center; backface-visibility: hidden; will-change: transform; }
+.image-motion.is-route-hidden > :not(.route-veil) { visibility: hidden; }
+.route-line { display: block; overflow: hidden; }
+.route-line-inner { display: block; white-space: nowrap; }
+html.is-navigating main, html.is-navigating .site-footer { pointer-events: none; }
 .headline-line { display: block; overflow: clip; }
 .headline-line-inner { display: block; will-change: transform; }
 .app-shell[data-theme="dark"] {
@@ -105,7 +102,7 @@ img { display: block; max-width: 100%; }
 .nav-toggle-input { display: none; position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; clip-path: inset(50%); }
 .menu-toggle { display: none; }
 .section-shell { margin: 0 auto; width: min(1440px, 91.8%); }
-.image-motion { --pointer-x: 0px; --pointer-y: 0px; --pointer-glow-x: 50%; --pointer-glow-y: 50%; }
+.image-motion { position: relative; --pointer-x: 0px; --pointer-y: 0px; --pointer-glow-x: 50%; --pointer-glow-y: 50%; }
 .image-motion > img { transform: translate3d(var(--pointer-x),var(--pointer-y),0) scale(1.015); transition: transform .65s cubic-bezier(.2,.7,.2,1),filter .45s; will-change: transform; }
 .image-motion:hover > img { transform: translate3d(var(--pointer-x),var(--pointer-y),0) scale(1.075); }
 .image-motion-light { position: absolute; z-index: 1; inset: 0; pointer-events: none; background: radial-gradient(circle at var(--pointer-glow-x) var(--pointer-glow-y),rgba(215,237,180,.2),transparent 38%); opacity: 0; transition: opacity .35s; }

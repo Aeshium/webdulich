@@ -424,10 +424,13 @@ function App() {
     const blocks = gsap.utils
       .toArray<HTMLElement>('main .eyebrow, main .topline-note, main .topline-pill, main .hero-index, main .subpage-index, main h3, main .round-link, main p')
       .filter((element) => isInView(element) && !descriptions.includes(element) && !element.closest('.image-motion, .route-line'))
+    const greenPanels = gsap.utils
+      .toArray<HTMLElement>('main .feature-section, main .connect-banner, main .closing-cta')
+      .filter(isInView)
     const aside = gsap.utils.toArray<HTMLElement>('main .hero-aside').filter(isInView)
     const footer = document.querySelector<HTMLElement>('.site-footer')
     const footerVisible = Boolean(footer && isInView(footer))
-    gsap.killTweensOf([...headings, ...descriptionLines, ...blocks, ...aside, ...darkVeils, ...paperVeils])
+    gsap.killTweensOf([...headings, ...descriptionLines, ...blocks, ...greenPanels, ...aside, ...darkVeils, ...paperVeils])
 
     let completed = false
     const commit = () => {
@@ -460,6 +463,14 @@ function App() {
         0,
       )
     }
+    if (greenPanels.length) {
+      timeline.fromTo(
+        greenPanels,
+        { clipPath: 'inset(0 0% 0 0)' },
+        { clipPath: 'inset(0 100% 0 0)', duration: 0.6, stagger: 0.04, ease: 'power2.in' },
+        0,
+      )
+    }
     if (aside.length) {
       timeline.to(aside, { opacity: 0, y: -16, duration: 0.45, ease: 'power2.in' }, 0)
     }
@@ -482,7 +493,7 @@ function App() {
         clearVeils(hosts)
         descriptions.forEach(restoreLines)
         gsap.set([...headings, ...aside], { clearProps: 'transform,opacity' })
-        gsap.set(blocks, { clearProps: 'clipPath' })
+        gsap.set([...blocks, ...greenPanels], { clearProps: 'clipPath' })
         if (footer) gsap.set(footer, { clearProps: 'clipPath' })
       }
     }

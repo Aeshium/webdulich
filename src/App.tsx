@@ -325,11 +325,21 @@ function App() {
   const swiperRef = useRef<SwiperInstance | null>(null)
   const routeTransitioning = useRef(false)
   const navigationPending = useRef(false)
+  const reducedMotionScrollReset = useRef(false)
   const locationRef = useRef(location)
   locationRef.current = location
   const experienceClose = () => setExperienceOpen(false)
 
   useEffect(() => {
+    const preventWheelDuringNavigation = (event: WheelEvent) => {
+      if (routeTransitioning.current || navigationPending.current) event.preventDefault()
+    }
+    const preventKeyScrollDuringNavigation = (event: KeyboardEvent) => {
+      if (!routeTransitioning.current && !navigationPending.current) return
+      if (!['ArrowDown', 'ArrowUp', 'PageDown', 'PageUp', 'Home', 'End', ' '].includes(event.key)) return
+      if (event.target instanceof HTMLElement && event.target.closest('input, textarea, select, button, [contenteditable="true"]')) return
+      event.preventDefault()
+    }
     const handleClick = (event: MouseEvent) => {
       if (
         event.defaultPrevented ||
@@ -357,8 +367,12 @@ function App() {
     }
     history.scrollRestoration = 'manual'
     document.addEventListener('click', handleClick)
+    document.addEventListener('wheel', preventWheelDuringNavigation, { passive: false })
+    document.addEventListener('keydown', preventKeyScrollDuringNavigation)
     return () => {
       document.removeEventListener('click', handleClick)
+      document.removeEventListener('wheel', preventWheelDuringNavigation)
+      document.removeEventListener('keydown', preventKeyScrollDuringNavigation)
     }
   }, [navigate])
 
@@ -374,22 +388,11 @@ function App() {
       const menuToggle = document.querySelector<HTMLInputElement>('#nav-toggle')
       if (menuToggle) menuToggle.checked = false
     }
-    const revealHash = () => {
-      if (!destination.hash) return
-      document.getElementById(decodeURIComponent(destination.hash.slice(1)))?.scrollIntoView()
-    }
 
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      reducedMotionScrollReset.current = true
       setDisplayLocation(destination)
-      window.scrollTo({ top: 0, left: 0, behavior: 'instant' })
       closeMenu()
-      navigationPending.current = false
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          ScrollTrigger.refresh()
-          revealHash()
-        })
-      })
       return
     }
 
@@ -424,13 +427,15 @@ function App() {
     const blocks = gsap.utils
       .toArray<HTMLElement>('main .eyebrow, main .topline-note, main .topline-pill, main .hero-index, main .subpage-index, main h3, main .round-link, main p')
       .filter((element) => isInView(element) && !descriptions.includes(element) && !element.closest('.image-motion, .route-line'))
-    const greenPanels = gsap.utils
-      .toArray<HTMLElement>('main .feature-section, main .connect-banner, main .closing-cta')
+    const panels = gsap.utils
+      .toArray<HTMLElement>(
+        'main .feature-section, main .connect-banner, main .closing-cta, main .stats-graphic, main .stat-cell, main .interest-form, main .solution-card, main .feature-row, main blockquote, main .quote-source',
+      )
       .filter(isInView)
     const aside = gsap.utils.toArray<HTMLElement>('main .hero-aside').filter(isInView)
     const footer = document.querySelector<HTMLElement>('.site-footer')
     const footerVisible = Boolean(footer && isInView(footer))
-    gsap.killTweensOf([...headings, ...descriptionLines, ...blocks, ...greenPanels, ...aside, ...darkVeils, ...paperVeils])
+    gsap.killTweensOf([...headings, ...descriptionLines, ...blocks, ...panels, ...aside, ...darkVeils, ...paperVeils])
 
     let completed = false
     const commit = () => {
@@ -441,17 +446,17 @@ function App() {
     }
     const timeline = gsap.timeline({ onComplete: commit })
     if (darkVeils.length) {
-      timeline.to(darkVeils, { scaleX: 1, duration: 0.45, ease: 'power3.inOut' }, 0)
-      timeline.to(paperVeils, { scaleX: 1, duration: 0.4, ease: 'power3.inOut' }, 0.42)
+      timeline.to(darkVeils, { scaleX: 1, duration: 0.34, ease: 'power3.inOut' }, 0)
+      timeline.to(paperVeils, { scaleX: 1, duration: 0.3, ease: 'power3.inOut' }, 0.27)
     }
     if (headings.length) {
-      timeline.to(headings, { yPercent: -100, duration: 0.6, stagger: 0.06, ease: 'power3.in' }, 0)
+      timeline.to(headings, { yPercent: -100, duration: 0.48, stagger: 0.02, ease: 'power3.in' }, 0)
     }
     if (descriptionLines.length) {
       timeline.fromTo(
         descriptionLines,
         { clipPath: 'inset(0 0% 0 0)' },
-        { clipPath: 'inset(0 100% 0 0)', duration: 0.5, stagger: 0.04, ease: 'power2.in' },
+        { clipPath: 'inset(0 100% 0 0)', duration: 0.4, stagger: 0.02, ease: 'power2.in' },
         0,
       )
     }
@@ -459,27 +464,27 @@ function App() {
       timeline.fromTo(
         blocks,
         { clipPath: 'inset(0 0% 0 0)' },
-        { clipPath: 'inset(0 100% 0 0)', duration: 0.45, stagger: 0.03, ease: 'power2.in' },
+        { clipPath: 'inset(0 100% 0 0)', duration: 0.38, stagger: 0.015, ease: 'power2.in' },
         0,
       )
     }
-    if (greenPanels.length) {
+    if (panels.length) {
       timeline.fromTo(
-        greenPanels,
+        panels,
         { clipPath: 'inset(0 0% 0 0)' },
-        { clipPath: 'inset(0 100% 0 0)', duration: 0.6, stagger: 0.04, ease: 'power2.in' },
+        { clipPath: 'inset(0 100% 0 0)', duration: 0.5, stagger: 0.02, ease: 'power2.in' },
         0,
       )
     }
     if (aside.length) {
-      timeline.to(aside, { opacity: 0, y: -16, duration: 0.45, ease: 'power2.in' }, 0)
+      timeline.to(aside, { opacity: 0, y: -16, duration: 0.4, ease: 'power2.in' }, 0)
     }
     if (footer && footerVisible) {
       timeline.fromTo(
         footer,
         { clipPath: 'inset(0% 0 0 0)' },
-        { clipPath: 'inset(100% 0 0 0)', duration: 0.7, ease: 'expo.inOut' },
-        Math.max(0, timeline.duration() - 0.3),
+        { clipPath: 'inset(100% 0 0 0)', duration: 0.52, ease: 'power2.in' },
+        0,
       )
     }
     if (!timeline.duration()) commit()
@@ -493,13 +498,28 @@ function App() {
         clearVeils(hosts)
         descriptions.forEach(restoreLines)
         gsap.set([...headings, ...aside], { clearProps: 'transform,opacity' })
-        gsap.set([...blocks, ...greenPanels], { clearProps: 'clipPath' })
+        gsap.set([...blocks, ...panels], { clearProps: 'clipPath' })
         if (footer) gsap.set(footer, { clearProps: 'clipPath' })
       }
     }
   }, [location, displayLocation.pathname, displayLocation.search])
 
   useLayoutEffect(() => {
+    if (reducedMotionScrollReset.current) {
+      reducedMotionScrollReset.current = false
+      if (window.scrollY > 0) {
+        window.scrollTo({ top: 0, left: 0, behavior: 'instant' })
+      }
+      navigationPending.current = false
+      const hash = locationRef.current.hash
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          ScrollTrigger.refresh()
+          if (hash) document.getElementById(decodeURIComponent(hash.slice(1)))?.scrollIntoView()
+        })
+      })
+      return
+    }
     if (!routeTransitioning.current) return
 
     if (window.scrollY > 0) {

@@ -145,22 +145,54 @@ async function waitForRouteImages(hosts: HTMLElement[]) {
     hosts.flatMap((host) =>
       gsap.utils.toArray<HTMLImageElement>('img', host).map(async (image) => {
         image.loading = 'eager'
+        const deadline = performance.now() + 1200
+        const remainingTime = () => Math.max(0, deadline - performance.now())
+        let loadTimedOut = false
         if (!image.complete) {
           await new Promise<void>((resolve) => {
-            const finish = () => resolve()
+            let timeoutId: number
+            const finish = () => {
+              window.clearTimeout(timeoutId)
+              image.removeEventListener('load', finish)
+              image.removeEventListener('error', finish)
+              resolve()
+            }
             image.addEventListener('load', finish, { once: true })
             image.addEventListener('error', finish, { once: true })
+            timeoutId = window.setTimeout(() => {
+              loadTimedOut = true
+              finish()
+            }, remainingTime())
             if (image.complete) finish()
           })
+        }
+        if (loadTimedOut) {
+          console.error(`Route transition image timed out: ${image.currentSrc}`)
+          return
         }
         if (!image.naturalWidth) {
           console.error(`Route transition image failed to load: ${image.currentSrc}`)
           return
         }
+        let decodeTimedOut = false
+        let decodeTimeoutId: number | undefined
         try {
-          await image.decode()
+          await Promise.race([
+            image.decode(),
+            new Promise<void>((resolve) => {
+              decodeTimeoutId = window.setTimeout(() => {
+                decodeTimedOut = true
+                resolve()
+              }, remainingTime())
+            }),
+          ])
         } catch (error) {
           console.error(`Route transition image failed to decode: ${image.currentSrc}`, error)
+        } finally {
+          window.clearTimeout(decodeTimeoutId)
+        }
+        if (decodeTimedOut) {
+          console.error(`Route transition image decode timed out: ${image.currentSrc}`)
         }
       }),
     ),
@@ -401,7 +433,6 @@ function App() {
     const commit = () => {
       if (completed) return
       completed = true
-      window.scrollTo({ top: 0, left: 0, behavior: 'instant' })
       closeMenu()
       setDisplayLocation(destination)
     }
@@ -459,6 +490,10 @@ function App() {
 
   useLayoutEffect(() => {
     if (!routeTransitioning.current) return
+
+    if (window.scrollY > 0) {
+      window.scrollTo({ top: 0, left: 0, behavior: 'instant' })
+    }
 
     const footer = document.querySelector<HTMLElement>('.site-footer')
     if (footer) gsap.set(footer, { clearProps: 'clipPath' })

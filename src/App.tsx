@@ -21,6 +21,7 @@ import { A11y, Autoplay } from 'swiper/modules'
 import { Swiper, SwiperSlide } from 'swiper/react'
 import type { Swiper as SwiperInstance } from 'swiper'
 import { HeadlineLine, SecondaryPage } from './SecondaryPages'
+import { getContentTitle } from './editorialContent'
 import ImageMotion from './ImageMotion'
 import { SiteFooter, SiteHeader, type SitePage } from './SiteChrome'
 import 'swiper/css'
@@ -429,13 +430,14 @@ function App() {
       .filter((element) => isInView(element) && !descriptions.includes(element) && !element.closest('.image-motion, .route-line'))
     const panels = gsap.utils
       .toArray<HTMLElement>(
-        'main .feature-section, main .connect-banner, main .closing-cta, main .stats-graphic, main .stat-cell, main .interest-form, main .solution-card, main .feature-row, main blockquote, main .quote-source',
+        'main .feature-section, main .connect-banner, main .closing-cta, main .stats-graphic, main .stat-cell, main .interest-form, main .solution-card, main .destination-card, main .experience-card, main .story-card, main .feature-card, main .editorial-block, main .related-link-card, main .story-experience-link, main .feature-row, main blockquote, main .quote-source',
       )
       .filter(isInView)
     const aside = gsap.utils.toArray<HTMLElement>('main .hero-aside').filter(isInView)
     const footer = document.querySelector<HTMLElement>('.site-footer')
     const footerVisible = Boolean(footer && isInView(footer))
-    gsap.killTweensOf([...headings, ...descriptionLines, ...blocks, ...panels, ...aside, ...darkVeils, ...paperVeils])
+    const activeTargets = [...headings, ...descriptionLines, ...blocks, ...panels, ...aside, ...darkVeils, ...paperVeils]
+    if (activeTargets.length) gsap.killTweensOf(activeTargets)
 
     let completed = false
     const commit = () => {
@@ -497,8 +499,10 @@ function App() {
         document.documentElement.classList.remove('is-navigating')
         clearVeils(hosts)
         descriptions.forEach(restoreLines)
-        gsap.set([...headings, ...aside], { clearProps: 'transform,opacity' })
-        gsap.set([...blocks, ...panels], { clearProps: 'clipPath' })
+        const transformTargets = [...headings, ...aside]
+        const clipTargets = [...blocks, ...panels]
+        if (transformTargets.length) gsap.set(transformTargets, { clearProps: 'transform,opacity' })
+        if (clipTargets.length) gsap.set(clipTargets, { clearProps: 'clipPath' })
         if (footer) gsap.set(footer, { clearProps: 'clipPath' })
       }
     }
@@ -600,9 +604,9 @@ function App() {
       settled = true
       descriptions.forEach(restoreLines)
       clearVeils(hosts)
-      gsap.set(headings, { clearProps: 'transform' })
-      gsap.set(blocks, { clearProps: 'clipPath' })
-      gsap.set(aside, { clearProps: 'opacity,transform' })
+      if (headings.length) gsap.set(headings, { clearProps: 'transform' })
+      if (blocks.length) gsap.set(blocks, { clearProps: 'clipPath' })
+      if (aside.length) gsap.set(aside, { clearProps: 'opacity,transform' })
       routeTransitioning.current = false
       navigationPending.current = false
       document.documentElement.classList.remove('is-navigating')
@@ -656,9 +660,9 @@ function App() {
       if (!settled) {
         descriptions.forEach(restoreLines)
         clearVeils(hosts)
-        gsap.set(headings, { clearProps: 'transform' })
-        gsap.set(blocks, { clearProps: 'clipPath' })
-        gsap.set(aside, { clearProps: 'opacity,transform' })
+        if (headings.length) gsap.set(headings, { clearProps: 'transform' })
+        if (blocks.length) gsap.set(blocks, { clearProps: 'clipPath' })
+        if (aside.length) gsap.set(aside, { clearProps: 'opacity,transform' })
       }
     }
   }, [displayLocation.key])
@@ -672,8 +676,9 @@ function App() {
       blog: 'Tạp chí — LUMI Việt Nam',
       register: 'Đăng ký trải nghiệm — LUMI Việt Nam',
     }
-    document.title = pageTitle[page]
-  }, [page])
+    const detailTitle = getContentTitle(displayLocation.pathname)
+    document.title = detailTitle ? `${detailTitle} — LUMI Việt Nam` : pageTitle[page]
+  }, [page, displayLocation.pathname])
 
   useEffect(() => {
     window.localStorage.setItem('lumi-theme', theme)
@@ -696,7 +701,7 @@ function App() {
       window.removeEventListener('scroll', updateProgress)
       window.removeEventListener('resize', updateProgress)
     }
-  }, [page])
+  }, [displayLocation.key])
 
   useEffect(() => {
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
@@ -830,7 +835,7 @@ function App() {
       }
     })
     return () => context.revert()
-  }, [page])
+  }, [displayLocation.key])
 
   return (
     <div className="app-shell" data-theme={theme}>
@@ -1124,7 +1129,7 @@ function App() {
         </section>
           </>
         ) : (
-          <SecondaryPage page={page} onOpenExperience={() => setExperienceOpen(true)} />
+          <SecondaryPage page={page} pathname={displayLocation.pathname} />
         )}
       </main>
 
@@ -1136,10 +1141,10 @@ function App() {
 
 function getCurrentPage(pathname: string): SitePage {
   const path = pathname.replace(/\/+$/, '') || '/'
-  if (path === '/solutions') return 'solutions'
-  if (path === '/experiences') return 'experiences'
+  if (path === '/solutions' || path.startsWith('/solutions/')) return 'solutions'
+  if (path === '/experiences' || path.startsWith('/experiences/')) return 'experiences'
   if (path === '/features' || path === '/fonctionnalites') return 'features'
-  if (path === '/blog') return 'blog'
+  if (path === '/blog' || path.startsWith('/blog/')) return 'blog'
   if (path === '/dang-ky') return 'register'
   return 'home'
 }

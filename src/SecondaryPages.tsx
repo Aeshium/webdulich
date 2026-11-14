@@ -1,78 +1,24 @@
 import { useState, type FormEvent, type ReactNode } from 'react'
 import {
+  ArrowLeft,
   ArrowDown,
   ArrowRight,
   ArrowUpRight,
   AudioLines,
-  Camera,
-  Compass,
-  Headphones,
-  Scan,
-  Sparkles,
 } from 'lucide-react'
 import type { SitePage } from './SiteChrome'
 import ImageMotion from './ImageMotion'
-
-const stories = [
-  {
-    category: 'THIÊN NHIÊN',
-    title: 'Một ngày trôi theo dòng nước Ninh Bình',
-    excerpt: 'Len qua miền núi đá, lắng nghe nhịp chèo khua giữa thung xanh.',
-    image: 'photo-1501785888041-af3ef285b470',
-    read: '06 PHÚT',
-  },
-  {
-    category: 'VĂN HÓA',
-    title: 'Hội An, khi phố lên đèn',
-    excerpt: 'Những sắc màu, tiếng rao và câu chuyện cũ còn ở lại bên sông.',
-    image: 'photo-1528181304800-259b08848526',
-    read: '04 PHÚT',
-  },
-  {
-    category: 'ẨM THỰC',
-    title: 'Hương vị theo chân người miền Trung',
-    excerpt: 'Từ căn bếp nhỏ đến mâm cơm ấm, ẩm thực là một cách để nhớ.',
-    image: 'photo-1504674900247-0877df9cc836',
-    read: '05 PHÚT',
-  },
-  {
-    category: 'CHUYỆN ĐƯỜNG XA',
-    title: 'Qua những khúc quanh Hà Giang',
-    excerpt: 'Cung đường mở ra núi cao, chợ phiên và những cuộc gặp tình cờ.',
-    image: 'photo-1464822759023-fed622ff2c3b',
-    read: '07 PHÚT',
-  },
-]
-
-const experiences = [
-  {
-    number: '01',
-    type: 'KHÔNG GIAN 360°',
-    title: 'Đi giữa miền non nước',
-    description: 'Mở rộng góc nhìn, chậm rãi khám phá cảnh sắc Ninh Bình.',
-    image: 'photo-1501785888041-af3ef285b470',
-  },
-  {
-    number: '02',
-    type: 'ÂM THANH & CÂU CHUYỆN',
-    title: 'Nghe Hội An kể chuyện',
-    description: 'Một chuyến tản bộ bằng âm thanh giữa những con phố cổ.',
-    image: 'photo-1528181304800-259b08848526',
-  },
-  {
-    number: '03',
-    type: 'BỘ SƯU TẬP HÌNH ẢNH',
-    title: 'Sắc xanh miền biển',
-    description: 'Gom những khoảnh khắc trong veo dọc theo bờ biển Việt Nam.',
-    image: 'photo-1510414842594-a61c69b5ae57',
-  },
-]
-
-const solutionItems = [
-  ['01', 'Miền đất & thiên nhiên', 'Từ núi cao, rừng sâu đến những miền biển đầy nắng.', 'photo-1464822759023-fed622ff2c3b', 'thien-nhien'],
-  ['02', 'Di sản & văn hóa', 'Chạm vào ký ức địa phương qua kiến trúc và chuyện kể.', 'photo-1528181304800-259b08848526', 'di-san'],
-  ['03', 'Ẩm thực bản địa', 'Khám phá văn hóa vùng miền qua hương vị và con người.', 'photo-1504674900247-0877df9cc836', 'am-thuc'],
-]
+import {
+  experienceItems,
+  featureItems,
+  resolveContentRoute,
+  solutionItems,
+  storyItems,
+  type EditorialSection,
+  type ExperienceItem,
+  type StoryItem,
+  type SolutionItem,
+} from './editorialContent'
 
 export function HeadlineLine({ children }: { children: ReactNode }) {
   return (
@@ -109,16 +55,25 @@ function PageIntro({
   title,
   description,
   image,
+  backHref,
+  backLabel,
 }: {
   index: string
   label: string
   title: ReactNode
   description: string
   image: string
+  backHref?: string
+  backLabel?: string
 }) {
   return (
     <section className="subpage-hero section-shell">
       <div className="subpage-copy">
+        {backHref && (
+          <a className="detail-back-link" href={backHref}>
+            <ArrowLeft size={14} /> {backLabel}
+          </a>
+        )}
         <span className="eyebrow"><span className="eyebrow-line" /> {label}</span>
         <h1 data-text-reveal>{title}</h1>
         <p>{description}</p>
@@ -150,14 +105,32 @@ function SolutionsPage() {
           <p>Mỗi bộ sưu tập là một cánh cửa dẫn vào vẻ đẹp thiên nhiên, di sản và đời sống Việt Nam.</p>
         </div>
         <div className="solution-grid">
-          {solutionItems.map(([number, title, description, image, id]) => (
-            <article id={id} className="solution-card" data-reveal key={number}>
-              <ImageCard image={image} alt={title} />
-              <div className="solution-card-meta"><span>{number} / LUMI COLLECTION</span><ArrowUpRight size={17} /></div>
-              <h3>{title}</h3>
-              <p>{description}</p>
-            </article>
+          {solutionItems.map((item) => (
+            <a id={item.slug} className="solution-card" data-reveal href={`/solutions/${item.slug}`} key={item.slug}>
+              <ImageCard image={item.image} alt={item.title} />
+              <div className="solution-card-meta"><span>{item.number} / LUMI COLLECTION</span><ArrowUpRight size={17} /></div>
+              <h3>{item.title}</h3>
+              <p>{item.description}</p>
+              <span className="card-action">KHÁM PHÁ CHỦ ĐỀ <ArrowUpRight size={14} /></span>
+            </a>
           ))}
+        </div>
+        <div className="destination-highlights" id="diem-den">
+          <div className="editorial-heading" data-reveal>
+            <h2 data-text-reveal><HeadlineLine>Hai miền đất,</HeadlineLine><HeadlineLine><em>hai nhịp kể.</em></HeadlineLine></h2>
+            <p>Mở thêm những lát cắt về Huế và miền Tây — nơi di sản, sông nước và đời sống gặp nhau.</p>
+          </div>
+          <div className="destination-highlight-grid">
+            {experienceItems.filter((item) => item.slug === 'hue' || item.slug === 'mien-tay').map((item) => (
+              <a className="destination-card" data-reveal href={`/experiences/${item.slug}`} key={item.slug}>
+                <ImageCard image={item.image} alt={item.destination} />
+                <span className="card-kicker">{item.region} · {item.type}</span>
+                <h3>{item.destination}</h3>
+                <p>{item.description}</p>
+                <ArrowUpRight size={18} aria-hidden="true" />
+              </a>
+            ))}
+          </div>
         </div>
       </section>
       <ConnectBanner />
@@ -165,10 +138,10 @@ function SolutionsPage() {
   )
 }
 
-function ExperiencesPage({ onOpenExperience }: { onOpenExperience: () => void }) {
+function ExperiencesPage() {
   const [filter, setFilter] = useState('TẤT CẢ')
-  const filters = ['TẤT CẢ', 'KHÔNG GIAN 360°', 'ÂM THANH & CÂU CHUYỆN', 'BỘ SƯU TẬP HÌNH ẢNH']
-  const visible = experiences.filter((item) => filter === 'TẤT CẢ' || item.type === filter)
+  const filters = ['TẤT CẢ', ...new Set(experienceItems.map((item) => item.type))]
+  const visible = experienceItems.filter((item) => filter === 'TẤT CẢ' || item.type === filter)
 
   return (
     <>
@@ -183,23 +156,24 @@ function ExperiencesPage({ onOpenExperience }: { onOpenExperience: () => void })
         <div className="section-marker" data-reveal><span className="marker-number">02</span><span className="marker-line" /><span className="eyebrow">CHỌN MỘT TRẢI NGHIỆM</span></div>
         <div className="editorial-heading" data-reveal>
           <h2 data-text-reveal><HeadlineLine>Một chạm,</HeadlineLine><HeadlineLine><em>một miền nhớ.</em></HeadlineLine></h2>
-          <p>Khám phá thử các định dạng trải nghiệm. Mỗi nội dung mở ra ngay trên trang, không cần đăng nhập.</p>
+          <p>Mỗi địa danh có một trang kể chuyện riêng bằng hình ảnh và ghi chép biên tập; chưa yêu cầu tài khoản hay thiết bị đặc biệt.</p>
         </div>
         <div className="filter-row" aria-label="Lọc trải nghiệm">
           {filters.map((item) => (
             <button type="button" className={filter === item ? 'filter-chip is-selected' : 'filter-chip'} onClick={() => setFilter(item)} key={item}>{item}</button>
           ))}
         </div>
-        <div className="experience-grid">
+        <div className="experience-grid" id="cau-chuyen">
           {visible.map((item) => (
-            <article className="experience-card" data-reveal key={item.number}>
-              <button type="button" className="experience-card-button" onClick={onOpenExperience} aria-label={`Mở trải nghiệm ${item.title}`}>
+            <article className="experience-card" data-reveal id={item.slug === 'ninh-binh' ? '360' : undefined} key={item.slug}>
+              <a className="experience-card-button" href={`/experiences/${item.slug}`} aria-label={`Mở câu chuyện ${item.title}`}>
                 <ImageCard image={item.image} alt={item.title} />
                 <span className="experience-card-arrow"><ArrowUpRight size={19} /></span>
-              </button>
-              <span className="card-kicker">{item.number} / {item.type}</span>
-              <h3>{item.title}</h3>
+              </a>
+              <span className="card-kicker">{item.number} / {item.region} · {item.type}</span>
+              <a className="experience-card-title-link" href={`/experiences/${item.slug}`}><h3>{item.title}</h3></a>
               <p>{item.description}</p>
+              <a className="card-action" href={`/experiences/${item.slug}`}>MỞ CÂU CHUYỆN <ArrowUpRight size={14} /></a>
             </article>
           ))}
         </div>
@@ -211,8 +185,8 @@ function ExperiencesPage({ onOpenExperience }: { onOpenExperience: () => void })
 
 function BlogPage() {
   const [filter, setFilter] = useState('TẤT CẢ')
-  const categories = ['TẤT CẢ', ...new Set(stories.map((story) => story.category))]
-  const visibleStories = stories.filter((story) => filter === 'TẤT CẢ' || story.category === filter)
+  const categories = ['TẤT CẢ', ...new Set(storyItems.map((story) => story.category))]
+  const visibleStories = storyItems.filter((story) => filter === 'TẤT CẢ' || story.category === filter)
 
   return (
     <>
@@ -238,10 +212,10 @@ function BlogPage() {
           {visibleStories.map((story, index) => (
             <article className={`story-card ${index === 0 && filter === 'TẤT CẢ' ? 'story-card-featured' : ''}`} data-reveal key={story.title}>
               <ImageCard image={story.image} alt={story.title} />
-              <div className="story-meta"><span>{story.category}</span><span>{story.read}</span></div>
-              <h3>{story.title}</h3>
+              <div className="story-meta"><span>{story.category} · {story.destination}</span><span>{story.read}</span></div>
+              <a className="story-title-link" href={`/blog/${story.slug}`}><h3>{story.title}</h3></a>
               <p>{story.excerpt}</p>
-              <a href="/dang-ky" className="text-link">Theo dấu câu chuyện <ArrowUpRight size={15} /></a>
+              <a href={`/blog/${story.slug}`} className="text-link">Đọc câu chuyện <ArrowUpRight size={15} /></a>
             </article>
           ))}
         </div>
@@ -265,26 +239,195 @@ function FeaturesPage() {
         <div className="section-marker" data-reveal><span className="marker-number">04</span><span className="marker-line" /><span className="eyebrow">NHỮNG LỚP TRẢI NGHIỆM</span></div>
         <div className="editorial-heading" data-reveal>
           <h2 data-text-reveal><HeadlineLine>Chạm vào</HeadlineLine><HeadlineLine><em>từng chi tiết.</em></HeadlineLine></h2>
-          <p>Các tính năng được giới thiệu ở mức ý tưởng. Trải nghiệm mô hình 3D chuyên sâu sẽ được bổ sung sau.</p>
+          <p>Một bộ sưu tập hình ảnh tĩnh giới thiệu những cách LUMI kể chuyện về điểm đến — chưa có tour 360° hay mô hình 3D tương tác.</p>
         </div>
-        <div className="feature-list">
-          {[
-            [Scan, 'Không gian mở rộng', 'Hình ảnh toàn cảnh giúp bạn quan sát cảnh sắc từ nhiều góc độ.'],
-            [Headphones, 'Âm thanh bản địa', 'Tiếng gió, tiếng nước và lời kể tạo nên cảm nhận gần gũi về một miền đất.'],
-            [Camera, 'Những câu chuyện bằng hình', 'Bộ sưu tập ảnh được biên tập theo chủ đề, địa danh và cảm hứng.'],
-            [Compass, 'Dẫn lối khám phá', 'Các điểm chạm nội dung gợi ý cho bạn những hướng khám phá tiếp theo.'],
-          ].map(([Icon, title, description], index) => {
-            const FeatureIcon = Icon as typeof Scan
-            return (
-              <article className="feature-row" data-reveal key={String(title)}>
-                <span className="feature-row-number">0{index + 1}</span>
-                <span className="feature-row-icon"><FeatureIcon size={20} /></span>
-                <h3>{String(title)}</h3>
-                <p>{String(description)}</p>
-                <Sparkles size={16} />
-              </article>
-            )
-          })}
+        <div className="feature-card-grid">
+          {featureItems.map((item) => (
+            <article className="feature-card" data-reveal key={item.number}>
+              <ImageCard image={item.image} alt={item.title} />
+              <span className="card-kicker">{item.number} / LUMI STORY TOOLS</span>
+              <h3>{item.title}</h3>
+              <p>{item.description}</p>
+            </article>
+          ))}
+        </div>
+      </section>
+      <ConnectBanner />
+    </>
+  )
+}
+
+function TwoLineTitle({ title }: { title: string }) {
+  const words = title.split(/\s+/)
+  const splitAt = Math.ceil(words.length / 2)
+  return (
+    <>
+      <HeadlineLine>{words.slice(0, splitAt).join(' ')}</HeadlineLine>
+      <HeadlineLine><em>{words.slice(splitAt).join(' ')}</em></HeadlineLine>
+    </>
+  )
+}
+
+function EditorialBlocks({ sections }: { sections: EditorialSection[] }) {
+  return (
+    <div className="editorial-block-list">
+      {sections.map((section, index) => (
+        <section className={section.image ? 'editorial-block has-image' : 'editorial-block'} data-reveal key={section.title}>
+          <div className="editorial-block-copy">
+            <span className="block-index">0{index + 1} / LUMI JOURNAL</span>
+            <h2 data-text-reveal>{section.title}</h2>
+            {section.paragraphs.map((paragraph) => <p key={paragraph}>{paragraph}</p>)}
+          </div>
+          {section.image && <ImageCard image={section.image} alt={section.title} />}
+        </section>
+      ))}
+    </div>
+  )
+}
+
+function DetailMarker({ number, label }: { number: string; label: string }) {
+  return (
+    <div className="section-marker" data-reveal>
+      <span className="marker-number">{number}</span>
+      <span className="marker-line" />
+      <span className="eyebrow">{label}</span>
+    </div>
+  )
+}
+
+function SolutionDetailPage({ item }: { item: SolutionItem }) {
+  const related = experienceItems.filter((experience) => item.relatedExperiences.includes(experience.slug))
+
+  return (
+    <>
+      <PageIntro
+        index={`${item.number} / GIẢI PHÁP`}
+        label="MỘT CÁCH KỂ VIỆT NAM"
+        title={<TwoLineTitle title={item.title} />}
+        description={item.description}
+        image={item.image}
+        backHref="/solutions"
+        backLabel="TẤT CẢ GIẢI PHÁP"
+      />
+      <section id="page-content" className="detail-content section-shell">
+        <DetailMarker number={item.number} label="CÂU CHUYỆN CỦA CHỦ ĐỀ" />
+        <p className="detail-lead" data-reveal>{item.intro}</p>
+        <EditorialBlocks sections={item.sections} />
+        <RelatedExperiences items={related} heading="Những hành trình liên quan" />
+      </section>
+      <ConnectBanner />
+    </>
+  )
+}
+
+function RelatedExperiences({ items, heading }: { items: ExperienceItem[]; heading: string }) {
+  return (
+    <section className="related-section">
+      <div className="editorial-heading" data-reveal>
+        <h2 data-text-reveal><HeadlineLine>Đi tiếp</HeadlineLine><HeadlineLine><em>câu chuyện.</em></HeadlineLine></h2>
+        <p>{heading}</p>
+      </div>
+      <div className="related-link-grid">
+        {items.map((item) => (
+          <a className="related-link-card" data-reveal href={`/experiences/${item.slug}`} key={item.slug}>
+            <ImageCard image={item.image} alt={item.destination} />
+            <span className="card-kicker">{item.region} · {item.type}</span>
+            <h3>{item.title}</h3>
+            <ArrowUpRight size={17} aria-hidden="true" />
+          </a>
+        ))}
+      </div>
+    </section>
+  )
+}
+
+function ExperienceDetailPage({ item }: { item: ExperienceItem }) {
+  const relatedStories = storyItems.filter((story) => story.experienceSlug === item.slug)
+
+  return (
+    <>
+      <PageIntro
+        index={`${item.number} / TRẢI NGHIỆM`}
+        label={`${item.region} · ${item.type}`}
+        title={<TwoLineTitle title={item.title} />}
+        description={item.description}
+        image={item.image}
+        backHref="/experiences"
+        backLabel="TẤT CẢ TRẢI NGHIỆM"
+      />
+      <section id="page-content" className="detail-content section-shell">
+        <DetailMarker number={item.number} label={`MỘT CÂU CHUYỆN TỪ ${item.destination.toUpperCase()}`} />
+        <p className="detail-lead" data-reveal>{item.intro}</p>
+        <EditorialBlocks sections={item.sections} />
+        <section className="detail-gallery" data-reveal>
+          <div className="editorial-heading">
+            <h2 data-text-reveal><HeadlineLine>Một vài</HeadlineLine><HeadlineLine><em>khung cảnh.</em></HeadlineLine></h2>
+            <p>Những hình ảnh gợi mở thêm sắc thái của {item.destination}.</p>
+          </div>
+          <div className="detail-gallery-grid">
+            {item.gallery.map((image, index) => (
+              <ImageCard image={image} alt={`${item.destination} — khung cảnh ${index + 1}`} key={`${image}-${index}`} />
+            ))}
+          </div>
+        </section>
+        {relatedStories.length > 0 && (
+          <div className="story-followup">
+            <span className="eyebrow">ĐỌC THÊM TỪ TẠP CHÍ LUMI</span>
+            {relatedStories.map((story) => (
+              <a className="text-link" href={`/blog/${story.slug}`} key={story.slug}>
+                {story.title} <ArrowUpRight size={15} />
+              </a>
+            ))}
+          </div>
+        )}
+      </section>
+      <ConnectBanner />
+    </>
+  )
+}
+
+function StoryDetailPage({ story }: { story: StoryItem }) {
+  const experience = story.experienceSlug
+    ? experienceItems.find((item) => item.slug === story.experienceSlug)
+    : undefined
+  const relatedStories = storyItems.filter((item) => item.slug !== story.slug).slice(0, 2)
+
+  return (
+    <>
+      <PageIntro
+        index="03 / TẠP CHÍ LUMI"
+        label={`${story.category} · ${story.destination}`}
+        title={<TwoLineTitle title={story.title} />}
+        description={story.excerpt}
+        image={story.image}
+        backHref="/blog"
+        backLabel="TẤT CẢ BÀI VIẾT"
+      />
+      <section id="page-content" className="detail-content section-shell">
+        <DetailMarker number={story.number} label={`MỘT GHI CHÉP TỪ ${story.destination.toUpperCase()}`} />
+        <div className="story-detail-meta" data-reveal>
+          <span>{story.category}</span>
+          <span>{story.read} ĐỌC</span>
+        </div>
+        <p className="detail-lead" data-reveal>{story.excerpt}</p>
+        <EditorialBlocks sections={story.sections} />
+        {experience && (
+          <a className="story-experience-link" data-reveal href={`/experiences/${experience.slug}`}>
+            <ImageCard image={experience.image} alt={experience.destination} />
+            <span>
+              <span className="card-kicker">TIẾP TỤC KHÁM PHÁ</span>
+              <strong>{experience.title}</strong>
+            </span>
+            <ArrowUpRight size={19} aria-hidden="true" />
+          </a>
+        )}
+        <div className="related-story-links">
+          <span className="eyebrow">CÓ THỂ BẠN CŨNG THÍCH</span>
+          {relatedStories.map((item) => (
+            <a className="text-link" href={`/blog/${item.slug}`} key={item.slug}>
+              {item.title} <ArrowUpRight size={15} />
+            </a>
+          ))}
         </div>
       </section>
       <ConnectBanner />
@@ -351,13 +494,27 @@ function ConnectBanner() {
 
 export function SecondaryPage({
   page,
-  onOpenExperience,
+  pathname,
 }: {
   page: SitePage
-  onOpenExperience: () => void
+  pathname: string
 }) {
+  const route = resolveContentRoute(pathname)
+  if (route?.collection === 'solutions') {
+    const item = solutionItems.find((solution) => solution.slug === route.slug)
+    if (item) return <SolutionDetailPage item={item} />
+  }
+  if (route?.collection === 'experiences') {
+    const item = experienceItems.find((experience) => experience.slug === route.slug)
+    if (item) return <ExperienceDetailPage item={item} />
+  }
+  if (route?.collection === 'blog') {
+    const story = storyItems.find((item) => item.slug === route.slug)
+    if (story) return <StoryDetailPage story={story} />
+  }
+
   if (page === 'solutions') return <SolutionsPage />
-  if (page === 'experiences') return <ExperiencesPage onOpenExperience={onOpenExperience} />
+  if (page === 'experiences') return <ExperiencesPage />
   if (page === 'features') return <FeaturesPage />
   if (page === 'blog') return <BlogPage />
   if (page === 'register') return <RegisterPage />
